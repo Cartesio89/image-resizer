@@ -78,7 +78,7 @@ export default function App() {
     } else {
       const numValue = parseInt(value) || 0;
       setCustomSizes(customSizes.map(size => 
-        size.id === id ? { ...size, [field]: numValue } : size
+        size.id === id ? { ...she, [field]: numValue } : size
       ));
     }
   };
@@ -97,40 +97,34 @@ export default function App() {
   const parseTextImport = () => {
     const lines = textImport.split('\n');
     const dimensionsRegex = /(\d{3,5})\s*[x×]\s*(\d{3,5})/gi;
-    const ratioRegex = /(\d+):(\d+):\s*(\d{3,5})\s*[x×]\s*(\d{3,5})/gi;
     
-    let newSizes = [];
+    const newSizes = [];
     let currentLabel = '';
     
-    lines.forEach(line => {
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      
       const labelMatch = line.match(/[-*]\s*Proporzioni\s*([\d:]+)/i) || 
                          line.match(/Proporzioni\s*([\d:]+)/i);
       if (labelMatch) {
         currentLabel = labelMatch[1];
       }
       
-      let match;
-      while ((match = ratioRegex.exec(line)) !== null) {
-        newSizes.push({
-          id: nextId + newSizes.length,
-          width: parseInt(match[3]),
-          height: parseInt(match[4]),
-          label: `Ratio ${match[1]}:${match[2]}`
-        });
-      }
-      
-      ratioRegex.lastIndex = 0;
-      while ((match = dimensionsRegex.exec(line)) !== null) {
-        if (!newSizes.some(s => s.width === parseInt(match[1]) && s.height === parseInt(match[2]))) {
+      const matches = line.matchAll(dimensionsRegex);
+      for (const match of matches) {
+        const width = parseInt(match[1]);
+        const height = parseInt(match[2]);
+        
+        if (!newSizes.some(s => s.width === width && s.height === height)) {
           newSizes.push({
             id: nextId + newSizes.length,
-            width: parseInt(match[1]),
-            height: parseInt(match[2]),
+            width: width,
+            height: height,
             label: currentLabel || ''
           });
         }
       }
-    });
+    }
     
     if (newSizes.length > 0) {
       setCustomSizes([...customSizes, ...newSizes]);
