@@ -38,6 +38,7 @@ function CropEditor({ imageUrl, targetWidth, targetHeight, onCropChange, cropDat
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [image, setImage] = useState(null);
+  const [lastTouchDistance, setLastTouchDistance] = useState(null);
 
   useEffect(() => {
     const img = new Image();
@@ -79,12 +80,23 @@ function CropEditor({ imageUrl, targetWidth, targetHeight, onCropChange, cropDat
   };
 
   const handleTouchStart = (e) => {
-    setIsDragging(true);
-    const touch = e.touches[0];
-    setDragStart({
-      x: touch.clientX - cropData.x,
-      y: touch.clientY - cropData.y
-    });
+    if (e.touches.length === 2) {
+      const distance = getTouchDistance(e.touches);
+      setLastTouchDistance(distance);
+    } else if (e.touches.length === 1) {
+      setIsDragging(true);
+      const touch = e.touches[0];
+      setDragStart({
+        x: touch.clientX - cropData.x,
+        y: touch.clientY - cropData.y
+      });
+    }
+  };
+
+  const getTouchDistance = (touches) => {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
   };
 
   const handleMouseMove = (e) => {
@@ -97,22 +109,39 @@ function CropEditor({ imageUrl, targetWidth, targetHeight, onCropChange, cropDat
   };
 
   const handleTouchMove = (e) => {
-    if (!isDragging) return;
-    const touch = e.touches[0];
-    onCropChange({
-      ...cropData,
-      x: touch.clientX - dragStart.x,
-      y: touch.clientY - dragStart.y
-    });
+    if (e.touches.length === 2 && lastTouchDistance !== null) {
+      e.preventDefault();
+      const distance = getTouchDistance(e.touches);
+      const delta = (distance - lastTouchDistance) * 0.01;
+      const newZoom = Math.max(0.1, Math.min(5, cropData.zoom + delta));
+      onCropChange({ ...cropData, zoom: newZoom });
+      setLastTouchDistance(distance);
+    } else if (e.touches.length === 1 && isDragging) {
+      const touch = e.touches[0];
+      onCropChange({
+        ...cropData,
+        x: touch.clientX - dragStart.x,
+        y: touch.clientY - dragStart.y
+      });
+    }
   };
 
-  const handleMouseUp = () => setIsDragging(false);
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+    setLastTouchDistance(null);
+  };
 
   const handleWheel = (e) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    const newZoom = Math.max(0.1, Math.min(5, cropData.zoom + delta));
-    onCropChange({ ...cropData, zoom: newZoom });
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      const newZoom = Math.max(0.1, Math.min(5, cropData.zoom + delta));
+      onCropChange({ ...cropData, zoom: newZoom });
+    }
   };
 
   return (
@@ -127,29 +156,50 @@ function CropEditor({ imageUrl, targetWidth, targetHeight, onCropChange, cropDat
         onMouseLeave={handleMouseUp}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
-        onTouchEnd={handleMouseUp}
+        onTouchEnd={handleTouchEnd}
         onWheel={handleWheel}
       />
-      <div className="absolute bottom-2 right-2 flex gap-2">
-        <button
-          onClick={() => onCropChange({ ...cropData, zoom: Math.max(0.1, cropData.zoom - 0.2) })}
-          className="bg-white p-2 rounded shadow hover:bg-gray-100"
-        >
-          <ZoomOut className="w-4 h-4" />
-        </button>
-        <button
-          onClick={() => onCropChange({ ...cropData, zoom: Math.min(5, cropData.zoom + 0.2) })}
-          className="bg-white p-2 rounded shadow hover:bg-gray-100"
-        >
-          <ZoomIn className="w-4 h-4" />
-        </button>
-        <button
-          onClick={() => onCropChange({ x: 0, y: 0, zoom: 1 })}
-          className="bg-white p-2 rounded shadow hover:bg-gray-100"
-        >
-          <RotateCcw className="w-4 h-4" />
-        </button>
+      <div className="mt-3 space-y-3">
+        <div className="flex items-center gap-3">
+          <label className="text-sm font-medium text-gray-700 min-w-16">Zoom:</label>
+          <input
+            type="range"
+            min="0.1"
+            max="5"
+            step="0.1"
+            value={cropData.zoom}
+            onChange={(e) => onCropChange({ ...cropData, zoom: parseFloat(e.target.value) })}
+            className="flex-1"
+          />
+          <span className="text-sm text-gray-600 min-w-12">{Math.round(cropData.zoom * 100)}%</span>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => onCropChange({ ...cropData, zoom: Math.max(0.1, cropData.zoom - 0.2) })}
+            className="flex items-center gap-1 bg-white px-3 py-2 rounded border border-gray-300 hover:bg-gray-50 text-sm"
+          >
+            <ZoomOut className="w-4 h-4" />
+            -
+          </button>
+          <button
+            onClick={() => onCropChange({ ...cropData, zoom: Math.min(5, cropData.zoom + 0.2) })}
+            className="flex items-center gap-1 bg-white px-3 py-2 rounded border border-gray-300 hover:bg-gray-50 text-sm"
+          >
+            <ZoomIn className="w-4 h-4" />
+            +
+          </button>
+          <button
+            onClick={() => onCropChange({ x: 0, y: 0, zoom: 1 })}
+            className="flex items-center gap-1 bg-white px-3 py-2 rounded border border-gray-300 hover:bg-gray-50 text-sm ml-auto"
+          >
+            <RotateCcw className="w-4 h-4" />
+            Reset
+          </button>
+        </div>
       </div>
+      <p className="text-xs text-gray-600 mt-2">
+        Trascina per spostare • Ctrl+Scroll o Pinch per zoom
+      </p>
     </div>
   );
 }
@@ -581,9 +631,6 @@ export default function App() {
                       cropData={size.cropData}
                       onCropChange={(newCropData) => updateSize(size.id, 'cropData', newCropData)}
                     />
-                    <p className="text-xs text-gray-600 mt-2">
-                      Trascina per spostare, scroll/pinch per zoom
-                    </p>
                   </div>
                 ))}
                 <button
