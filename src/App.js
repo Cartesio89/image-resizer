@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, Download, Image as ImageIcon, Plus, X, FileText, Sparkles } from 'lucide-react';
+import { Upload, Download, Image as ImageIcon, Plus, X } from 'lucide-react';
 
 const SOCIAL_PRESETS = {
   'Facebook Post': [
@@ -249,15 +249,13 @@ export default function App() {
                 onClick={() => setShowPresets(!showPresets)}
                 className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition text-sm"
               >
-                <Sparkles className="w-4 h-4" />
-                Preset Social
+                ✨ Preset Social
               </button>
               <button
                 onClick={() => setShowTextImport(!showTextImport)}
                 className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition text-sm"
               >
-                <FileText className="w-4 h-4" />
-                Importa testo
+                📄 Importa testo
               </button>
               <button
                 onClick={addCustomSize}
