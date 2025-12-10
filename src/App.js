@@ -247,15 +247,15 @@ export default function App() {
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => setShowPresets(!showPresets)}
-                className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition text-sm"
+                className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition text-sm"
               >
-                ✨ Preset Social
+                Preset Social
               </button>
               <button
                 onClick={() => setShowTextImport(!showTextImport)}
-                className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition text-sm"
+                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition text-sm"
               >
-                📄 Importa testo
+                Importa testo
               </button>
               <button
                 onClick={addCustomSize}
@@ -283,7 +283,7 @@ export default function App() {
                         >
                           <span className="font-medium">{preset.label}</span>
                           <span className="text-gray-500 text-xs ml-2">
-                            {preset.width}×{preset.height}
+                            {preset.width}x{preset.height}
                           </span>
                         </button>
                       ))}
@@ -303,7 +303,7 @@ export default function App() {
               <textarea
                 value={textImport}
                 onChange={(e) => setTextImport(e.target.value)}
-                placeholder="Es:&#10;Proporzioni: da 1.91:1 a 4:5&#10;Risoluzione:&#10;- Proporzioni 1:1: 1440 x 1440 pixel&#10;- Proporzioni 4:5: 1440 x 1800 pixel"
+                placeholder="Es: Proporzioni 1:1: 1440 x 1440 pixel"
                 className="w-full h-32 px-3 py-2 border border-green-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 font-mono text-sm"
               />
               <button
