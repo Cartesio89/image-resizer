@@ -119,8 +119,8 @@ function CropEditor({ imageUrl, targetWidth, targetHeight, onCropChange, cropDat
     <div className="relative">
       <canvas
         ref={canvasRef}
-        className="w-full h-48 bg-gray-100 rounded cursor-move"
-        style={{ aspectRatio: targetWidth / targetHeight }}
+        className="w-full bg-gray-100 rounded cursor-move"
+        style={{ aspectRatio: targetWidth / targetHeight, minHeight: '400px', maxHeight: '600px' }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
