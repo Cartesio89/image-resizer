@@ -78,7 +78,7 @@ export default function App() {
     } else {
       const numValue = parseInt(value) || 0;
       setCustomSizes(customSizes.map(size => 
-        size.id === id ? { ...she, [field]: numValue } : size
+        size.id === id ? { ...size, [field]: numValue } : size
       ));
     }
   };
@@ -88,7 +88,7 @@ export default function App() {
       id: nextId,
       width: preset.width,
       height: preset.height,
-      label: `${platform} - ${preset.label}`
+      label: platform + ' - ' + preset.label
     };
     setCustomSizes([...customSizes, newSize]);
     setNextId(nextId + 1);
@@ -96,32 +96,35 @@ export default function App() {
 
   const parseTextImport = () => {
     const lines = textImport.split('\n');
-    const dimensionsRegex = /(\d{3,5})\s*[x×]\s*(\d{3,5})/gi;
-    
     const newSizes = [];
     let currentLabel = '';
     
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       
-      const labelMatch = line.match(/[-*]\s*Proporzioni\s*([\d:]+)/i) || 
-                         line.match(/Proporzioni\s*([\d:]+)/i);
+      const labelMatch = line.match(/[-*]?\s*Proporzioni\s*([\d:]+)/i);
       if (labelMatch) {
         currentLabel = labelMatch[1];
       }
       
-      const matches = line.matchAll(dimensionsRegex);
-      for (const match of matches) {
-        const width = parseInt(match[1]);
-        const height = parseInt(match[2]);
-        
-        if (!newSizes.some(s => s.width === width && s.height === height)) {
-          newSizes.push({
-            id: nextId + newSizes.length,
-            width: width,
-            height: height,
-            label: currentLabel || ''
-          });
+      const dimensionMatches = line.match(/(\d{3,5})\s*[x×]\s*(\d{3,5})/gi);
+      if (dimensionMatches) {
+        for (let j = 0; j < dimensionMatches.length; j++) {
+          const parts = dimensionMatches[j].match(/(\d{3,5})\s*[x×]\s*(\d{3,5})/i);
+          if (parts) {
+            const width = parseInt(parts[1]);
+            const height = parseInt(parts[2]);
+            
+            const exists = newSizes.some(s => s.width === width && s.height === height);
+            if (!exists) {
+              newSizes.push({
+                id: nextId + newSizes.length,
+                width: width,
+                height: height,
+                label: currentLabel || ''
+              });
+            }
+          }
         }
       }
     }
@@ -142,7 +145,8 @@ export default function App() {
     img.onload = async () => {
       const results = [];
       
-      for (const size of customSizes) {
+      for (let i = 0; i < customSizes.length; i++) {
+        const size = customSizes[i];
         if (size.width <= 0 || size.height <= 0) continue;
         
         const canvas = document.createElement('canvas');
@@ -182,7 +186,7 @@ export default function App() {
         }
         
         results.push({
-          name: `${size.width}x${size.height}`,
+          name: size.width + 'x' + size.height,
           label: size.label,
           url: URL.createObjectURL(blob),
           size: (blob.size / 1024).toFixed(2),
@@ -209,8 +213,8 @@ export default function App() {
     const a = document.createElement('a');
     a.href = image.url;
     const filename = image.label 
-      ? `${image.label.replace(/\s+/g, '_')}_${image.name}.jpg`
-      : `resized_${image.name}.jpg`;
+      ? image.label.replace(/\s+/g, '_') + '_' + image.name + '.jpg'
+      : 'resized_' + image.name + '.jpg';
     a.download = filename;
     a.click();
   };
