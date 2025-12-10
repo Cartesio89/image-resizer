@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Upload, Download, Image as ImageIcon, Plus, X } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Upload, Download, Image as ImageIcon, Plus, X, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 
 const SOCIAL_PRESETS = {
   'Facebook Post': [
@@ -33,19 +33,143 @@ const SOCIAL_PRESETS = {
   ]
 };
 
+function CropEditor({ imageUrl, targetWidth, targetHeight, onCropChange, cropData }) {
+  const canvasRef = useRef(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [image, setImage] = useState(null);
+
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => setImage(img);
+    img.src = imageUrl;
+  }, [imageUrl]);
+
+  useEffect(() => {
+    if (!image || !canvasRef.current) return;
+    
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    const rect = canvas.getBoundingClientRect();
+    
+    canvas.width = rect.width * 2;
+    canvas.height = rect.height * 2;
+    
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    const scale = cropData.zoom;
+    const imgWidth = image.width * scale;
+    const imgHeight = image.height * scale;
+    
+    ctx.drawImage(
+      image,
+      cropData.x * 2,
+      cropData.y * 2,
+      imgWidth * 2,
+      imgHeight * 2
+    );
+  }, [image, cropData]);
+
+  const handleMouseDown = (e) => {
+    setIsDragging(true);
+    setDragStart({
+      x: e.clientX - cropData.x,
+      y: e.clientY - cropData.y
+    });
+  };
+
+  const handleTouchStart = (e) => {
+    setIsDragging(true);
+    const touch = e.touches[0];
+    setDragStart({
+      x: touch.clientX - cropData.x,
+      y: touch.clientY - cropData.y
+    });
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isDragging) return;
+    onCropChange({
+      ...cropData,
+      x: e.clientX - dragStart.x,
+      y: e.clientY - dragStart.y
+    });
+  };
+
+  const handleTouchMove = (e) => {
+    if (!isDragging) return;
+    const touch = e.touches[0];
+    onCropChange({
+      ...cropData,
+      x: touch.clientX - dragStart.x,
+      y: touch.clientY - dragStart.y
+    });
+  };
+
+  const handleMouseUp = () => setIsDragging(false);
+
+  const handleWheel = (e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    const newZoom = Math.max(0.1, Math.min(5, cropData.zoom + delta));
+    onCropChange({ ...cropData, zoom: newZoom });
+  };
+
+  return (
+    <div className="relative">
+      <canvas
+        ref={canvasRef}
+        className="w-full h-48 bg-gray-100 rounded cursor-move"
+        style={{ aspectRatio: targetWidth / targetHeight }}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleMouseUp}
+        onWheel={handleWheel}
+      />
+      <div className="absolute bottom-2 right-2 flex gap-2">
+        <button
+          onClick={() => onCropChange({ ...cropData, zoom: Math.max(0.1, cropData.zoom - 0.2) })}
+          className="bg-white p-2 rounded shadow hover:bg-gray-100"
+        >
+          <ZoomOut className="w-4 h-4" />
+        </button>
+        <button
+          onClick={() => onCropChange({ ...cropData, zoom: Math.min(5, cropData.zoom + 0.2) })}
+          className="bg-white p-2 rounded shadow hover:bg-gray-100"
+        >
+          <ZoomIn className="w-4 h-4" />
+        </button>
+        <button
+          onClick={() => onCropChange({ x: 0, y: 0, zoom: 1 })}
+          className="bg-white p-2 rounded shadow hover:bg-gray-100"
+        >
+          <RotateCcw className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
+  const [activeTab, setActiveTab] = useState('contain');
   const [originalImage, setOriginalImage] = useState(null);
   const [processedImages, setProcessedImages] = useState([]);
   const [processing, setProcessing] = useState(false);
+  const [maxQuality, setMaxQuality] = useState(false);
   const [customSizes, setCustomSizes] = useState([
-    { id: 1, width: 1920, height: 1080, label: '' },
-    { id: 2, width: 1920, height: 800, label: '' },
-    { id: 3, width: 1200, height: 800, label: '' }
+    { id: 1, width: 1920, height: 1080, label: '', cropData: { x: 0, y: 0, zoom: 1 } },
+    { id: 2, width: 1920, height: 800, label: '', cropData: { x: 0, y: 0, zoom: 1 } },
+    { id: 3, width: 1200, height: 800, label: '', cropData: { x: 0, y: 0, zoom: 1 } }
   ]);
   const [nextId, setNextId] = useState(4);
   const [showPresets, setShowPresets] = useState(false);
   const [showTextImport, setShowTextImport] = useState(false);
   const [textImport, setTextImport] = useState('');
+  const [showCropEditor, setShowCropEditor] = useState(false);
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
@@ -53,14 +177,17 @@ export default function App() {
       const reader = new FileReader();
       reader.onload = (event) => {
         setOriginalImage(event.target.result);
-        processImage(event.target.result);
+        setShowCropEditor(activeTab === 'cover');
+        if (activeTab === 'contain') {
+          processImage(event.target.result);
+        }
       };
       reader.readAsDataURL(file);
     }
   };
 
   const addCustomSize = () => {
-    setCustomSizes([...customSizes, { id: nextId, width: 1920, height: 1080, label: '' }]);
+    setCustomSizes([...customSizes, { id: nextId, width: 1920, height: 1080, label: '', cropData: { x: 0, y: 0, zoom: 1 } }]);
     setNextId(nextId + 1);
   };
 
@@ -75,6 +202,10 @@ export default function App() {
       setCustomSizes(customSizes.map(size => 
         size.id === id ? { ...size, [field]: value } : size
       ));
+    } else if (field === 'cropData') {
+      setCustomSizes(customSizes.map(size => 
+        size.id === id ? { ...size, cropData: value } : size
+      ));
     } else {
       const numValue = parseInt(value) || 0;
       setCustomSizes(customSizes.map(size => 
@@ -88,7 +219,8 @@ export default function App() {
       id: nextId,
       width: preset.width,
       height: preset.height,
-      label: platform + ' - ' + preset.label
+      label: platform + ' - ' + preset.label,
+      cropData: { x: 0, y: 0, zoom: 1 }
     };
     setCustomSizes([...customSizes, newSize]);
     setNextId(nextId + 1);
@@ -121,7 +253,8 @@ export default function App() {
                 id: nextId + newSizes.length,
                 width: width,
                 height: height,
-                label: currentLabel || ''
+                label: currentLabel || '',
+                cropData: { x: 0, y: 0, zoom: 1 }
               });
             }
           }
@@ -135,6 +268,63 @@ export default function App() {
       setTextImport('');
       setShowTextImport(false);
     }
+  };
+
+  const processImageWithCrop = async () => {
+    if (!originalImage) return;
+    
+    setProcessing(true);
+    const img = new Image();
+    img.src = originalImage;
+    
+    img.onload = async () => {
+      const results = [];
+      
+      for (let i = 0; i < customSizes.length; i++) {
+        const size = customSizes[i];
+        if (size.width <= 0 || size.height <= 0) continue;
+        
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        canvas.width = size.width;
+        canvas.height = size.height;
+        
+        const scale = size.cropData.zoom;
+        const imgWidth = img.width * scale;
+        const imgHeight = img.height * scale;
+        
+        ctx.drawImage(
+          img,
+          size.cropData.x,
+          size.cropData.y,
+          imgWidth,
+          imgHeight
+        );
+        
+        let quality = maxQuality ? 1 : 0.95;
+        let blob = await canvasToBlob(canvas, quality);
+        
+        if (!maxQuality) {
+          while (blob.size > 500000 && quality > 0.1) {
+            quality -= 0.05;
+            blob = await canvasToBlob(canvas, quality);
+          }
+        }
+        
+        results.push({
+          name: size.width + 'x' + size.height,
+          label: size.label,
+          url: URL.createObjectURL(blob),
+          size: (blob.size / 1024).toFixed(2),
+          blob: blob
+        });
+      }
+      
+      setProcessedImages(results);
+      setProcessing(false);
+      setShowCropEditor(false);
+    };
   };
 
   const processImage = async (imageSrc) => {
@@ -177,12 +367,14 @@ export default function App() {
         
         ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
         
-        let quality = 0.95;
+        let quality = maxQuality ? 1 : 0.95;
         let blob = await canvasToBlob(canvas, quality);
         
-        while (blob.size > 500000 && quality > 0.1) {
-          quality -= 0.05;
-          blob = await canvasToBlob(canvas, quality);
+        if (!maxQuality) {
+          while (blob.size > 500000 && quality > 0.1) {
+            quality -= 0.05;
+            blob = await canvasToBlob(canvas, quality);
+          }
         }
         
         results.push({
@@ -225,9 +417,13 @@ export default function App() {
     });
   };
 
-  const reprocess = () => {
-    if (originalImage) {
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    setProcessedImages([]);
+    if (originalImage && tab === 'contain') {
       processImage(originalImage);
+    } else if (originalImage && tab === 'cover') {
+      setShowCropEditor(true);
     }
   };
 
@@ -237,152 +433,232 @@ export default function App() {
         <h1 className="text-3xl font-bold text-gray-900 mb-2">
           Image Resizer Pro
         </h1>
-        <p className="text-gray-600 mb-8">Ridimensiona con preset social o dimensioni custom - Max 500KB</p>
+        <p className="text-gray-600 mb-8">Ridimensiona con preset social o dimensioni custom</p>
         
-        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-            <h2 className="text-xl font-semibold text-gray-800">Dimensioni output</h2>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setShowPresets(!showPresets)}
-                className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition text-sm"
-              >
-                Preset Social
-              </button>
-              <button
-                onClick={() => setShowTextImport(!showTextImport)}
-                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition text-sm"
-              >
-                Importa testo
-              </button>
-              <button
-                onClick={addCustomSize}
-                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm"
-              >
-                <Plus className="w-4 h-4" />
-                Aggiungi
-              </button>
-            </div>
+        <div className="bg-white rounded-lg shadow-md mb-8">
+          <div className="flex border-b border-gray-200">
+            <button
+              onClick={() => handleTabChange('contain')}
+              className={'flex-1 px-6 py-4 text-sm font-medium transition ' + (activeTab === 'contain' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600 hover:text-gray-900')}
+            >
+              Con bordi bianchi
+            </button>
+            <button
+              onClick={() => handleTabChange('cover')}
+              className={'flex-1 px-6 py-4 text-sm font-medium transition ' + (activeTab === 'cover' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600 hover:text-gray-900')}
+            >
+              Crop personalizzato
+            </button>
           </div>
+          
+          <div className="p-6">
+            <div className="mb-6">
+              {activeTab === 'contain' ? (
+                <p className="text-sm text-gray-600">
+                  L'immagine viene ridimensionata mantenendo le proporzioni e aggiungendo bordi bianchi.
+                </p>
+              ) : (
+                <p className="text-sm text-gray-600">
+                  Trascina e zoom sull'immagine per decidere cosa tagliare. Ogni dimensione ha il suo crop.
+                </p>
+              )}
+            </div>
 
-          {showPresets && (
-            <div className="mb-6 p-4 bg-purple-50 rounded-lg border border-purple-200">
-              <h3 className="font-semibold text-purple-900 mb-3">Preset Social Media</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {Object.entries(SOCIAL_PRESETS).map(([platform, presets]) => (
-                  <div key={platform} className="bg-white rounded-lg p-3 border border-purple-100">
-                    <h4 className="font-semibold text-sm text-gray-800 mb-2">{platform}</h4>
-                    <div className="space-y-1">
-                      {presets.map((preset, idx) => (
+            <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={maxQuality}
+                  onChange={(e) => setMaxQuality(e.target.checked)}
+                  className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                />
+                <div>
+                  <span className="font-medium text-gray-900">Qualità massima</span>
+                  <p className="text-sm text-gray-600">
+                    {maxQuality ? 'Nessuna compressione (file più grandi)' : 'Comprimi automaticamente sotto 500KB'}
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+              <h2 className="text-xl font-semibold text-gray-800">Dimensioni output</h2>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => setShowPresets(!showPresets)}
+                  className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition text-sm"
+                >
+                  Preset Social
+                </button>
+                <button
+                  onClick={() => setShowTextImport(!showTextImport)}
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition text-sm"
+                >
+                  Importa testo
+                </button>
+                <button
+                  onClick={addCustomSize}
+                  className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm"
+                >
+                  <Plus className="w-4 h-4" />
+                  Aggiungi
+                </button>
+              </div>
+            </div>
+
+            {showPresets && (
+              <div className="mb-6 p-4 bg-purple-50 rounded-lg border border-purple-200">
+                <h3 className="font-semibold text-purple-900 mb-3">Preset Social Media</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {Object.entries(SOCIAL_PRESETS).map(([platform, presets]) => (
+                    <div key={platform} className="bg-white rounded-lg p-3 border border-purple-100">
+                      <h4 className="font-semibold text-sm text-gray-800 mb-2">{platform}</h4>
+                      <div className="space-y-1">
+                        {presets.map((preset, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => addPreset(platform, preset)}
+                            className="w-full text-left text-sm px-3 py-2 rounded bg-gray-50 hover:bg-purple-100 transition"
+                          >
+                            <span className="font-medium">{preset.label}</span>
+                            <span className="text-gray-500 text-xs ml-2">
+                              {preset.width}x{preset.height}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {showTextImport && (
+              <div className="mb-6 p-4 bg-green-50 rounded-lg border border-green-200">
+                <h3 className="font-semibold text-green-900 mb-2">Importa specifiche da testo</h3>
+                <p className="text-sm text-green-700 mb-3">
+                  Incolla le specifiche (es. da Facebook Ads) - verranno estratte automaticamente le dimensioni
+                </p>
+                <textarea
+                  value={textImport}
+                  onChange={(e) => setTextImport(e.target.value)}
+                  placeholder="Es: Proporzioni 1:1: 1440 x 1440 pixel"
+                  className="w-full h-32 px-3 py-2 border border-green-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 font-mono text-sm"
+                />
+                <button
+                  onClick={parseTextImport}
+                  className="mt-3 bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition"
+                >
+                  Estrai dimensioni
+                </button>
+              </div>
+            )}
+            
+            {showCropEditor && originalImage ? (
+              <div className="space-y-6 mb-6">
+                {customSizes.map((size) => (
+                  <div key={size.id} className="p-4 border-2 border-blue-300 rounded-lg bg-blue-50">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <span className="font-semibold text-gray-800">
+                          {size.width}x{size.height}
+                        </span>
+                        {size.label && <span className="text-sm text-gray-600 ml-2">({size.label})</span>}
+                      </div>
+                      {customSizes.length > 1 && (
                         <button
-                          key={idx}
-                          onClick={() => addPreset(platform, preset)}
-                          className="w-full text-left text-sm px-3 py-2 rounded bg-gray-50 hover:bg-purple-100 transition"
+                          onClick={() => removeSize(size.id)}
+                          className="text-red-500 hover:text-red-700"
                         >
-                          <span className="font-medium">{preset.label}</span>
-                          <span className="text-gray-500 text-xs ml-2">
-                            {preset.width}x{preset.height}
-                          </span>
+                          <X className="w-5 h-5" />
                         </button>
-                      ))}
+                      )}
+                    </div>
+                    <CropEditor
+                      imageUrl={originalImage}
+                      targetWidth={size.width}
+                      targetHeight={size.height}
+                      cropData={size.cropData}
+                      onCropChange={(newCropData) => updateSize(size.id, 'cropData', newCropData)}
+                    />
+                    <p className="text-xs text-gray-600 mt-2">
+                      Trascina per spostare, scroll/pinch per zoom
+                    </p>
+                  </div>
+                ))}
+                <button
+                  onClick={processImageWithCrop}
+                  disabled={processing}
+                  className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition font-medium disabled:opacity-50"
+                >
+                  Genera immagini con crop personalizzato
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {customSizes.map((size) => (
+                  <div key={size.id} className="p-4 border border-gray-200 rounded-lg">
+                    <div className="flex items-start justify-between mb-3">
+                      <input
+                        type="text"
+                        value={size.label}
+                        onChange={(e) => updateSize(size.id, 'label', e.target.value)}
+                        placeholder="Etichetta (opzionale)"
+                        className="flex-1 text-sm px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                      {customSizes.length > 1 && (
+                        <button
+                          onClick={() => removeSize(size.id)}
+                          className="ml-2 text-red-500 hover:text-red-700 transition"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Larghezza</label>
+                        <input
+                          type="number"
+                          value={size.width}
+                          onChange={(e) => updateSize(size.id, 'width', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          min="1"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Altezza</label>
+                        <input
+                          type="number"
+                          value={size.height}
+                          onChange={(e) => updateSize(size.id, 'height', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          min="1"
+                        />
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
-
-          {showTextImport && (
-            <div className="mb-6 p-4 bg-green-50 rounded-lg border border-green-200">
-              <h3 className="font-semibold text-green-900 mb-2">Importa specifiche da testo</h3>
-              <p className="text-sm text-green-700 mb-3">
-                Incolla le specifiche (es. da Facebook Ads) - verranno estratte automaticamente le dimensioni
-              </p>
-              <textarea
-                value={textImport}
-                onChange={(e) => setTextImport(e.target.value)}
-                placeholder="Es: Proporzioni 1:1: 1440 x 1440 pixel"
-                className="w-full h-32 px-3 py-2 border border-green-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 font-mono text-sm"
-              />
-              <button
-                onClick={parseTextImport}
-                className="mt-3 bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition"
-              >
-                Estrai dimensioni
-              </button>
-            </div>
-          )}
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {customSizes.map((size) => (
-              <div key={size.id} className="p-4 border border-gray-200 rounded-lg">
-                <div className="flex items-start justify-between mb-3">
-                  <input
-                    type="text"
-                    value={size.label}
-                    onChange={(e) => updateSize(size.id, 'label', e.target.value)}
-                    placeholder="Etichetta (opzionale)"
-                    className="flex-1 text-sm px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                  {customSizes.length > 1 && (
-                    <button
-                      onClick={() => removeSize(size.id)}
-                      className="ml-2 text-red-500 hover:text-red-700 transition"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  )}
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">Larghezza</label>
-                    <input
-                      type="number"
-                      value={size.width}
-                      onChange={(e) => updateSize(size.id, 'width', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      min="1"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">Altezza</label>
-                    <input
-                      type="number"
-                      value={size.height}
-                      onChange={(e) => updateSize(size.id, 'height', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      min="1"
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
+            )}
           </div>
-          
-          {originalImage && (
-            <button
-              onClick={reprocess}
-              disabled={processing}
-              className="mt-4 w-full bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition font-medium disabled:opacity-50"
-            >
-              Rielabora con nuove dimensioni
-            </button>
-          )}
         </div>
 
-        <div className="bg-white rounded-lg shadow-md p-8 mb-8">
-          <label className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-500 transition">
-            <Upload className="w-12 h-12 text-gray-400 mb-4" />
-            <span className="text-gray-600 font-medium">Carica immagine</span>
-            <span className="text-sm text-gray-400 mt-2">JPEG, PNG, WebP, GIF, BMP</span>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleImageUpload}
-              className="hidden"
-            />
-          </label>
-        </div>
+        {!showCropEditor && (
+          <div className="bg-white rounded-lg shadow-md p-8 mb-8">
+            <label className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-500 transition">
+              <Upload className="w-12 h-12 text-gray-400 mb-4" />
+              <span className="text-gray-600 font-medium">Carica immagine</span>
+              <span className="text-sm text-gray-400 mt-2">JPEG, PNG, WebP, GIF, BMP</span>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                className="hidden"
+              />
+            </label>
+          </div>
+        )}
 
         {processing && (
           <div className="text-center py-8">
